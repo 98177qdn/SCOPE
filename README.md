@@ -10,7 +10,7 @@ First, please make sure you have installed Conda. Then, our environment can be i
 # Key Dependencies
 
 ------------
-##### *Lower versions are not guaranteed to be feasible:*
+Lower versions are not guaranteed to be feasible:
 
     numpy: 1.26.3
     gym: 0.26.2
