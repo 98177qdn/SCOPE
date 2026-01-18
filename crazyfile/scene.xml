@@ -1,0 +1,456 @@
+<mujoco model="CF2 scene">
+  <!-- 引入 Crazyflie 模型及其 assets / defaults -->
+  <include file="cf2.xml"/>
+
+  <option timestep="0.01"/>
+  <statistic center="0 0 0.1" extent="0.2" meansize=".05"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="-20" elevation="-20" ellipsoidinertia="true"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient"
+             rgb1="0.3 0.5 0.7" rgb2="0 0 0"
+             width="512" height="3072"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge"
+             rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+             markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane"
+              texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+
+    <!-- 目标机用的红色机体材质 -->
+    <material name="target_red" rgba="1 0 0 1"/>
+
+    <!-- 安全区域材质（半透明） -->
+    <material name="safe_hunter" rgba="0 1 0 0.1"/>
+    <material name="safe_target" rgba="1 0 0 0.1"/>
+
+    <!-- 障碍物材质：灰色半透明球体 -->
+    <material name="obstacle_mat" rgba="0.5 0.5 0.5 0.4"/>
+  </asset>
+
+  <worldbody>
+    <!-- 场景中心：(2 * 0.035/0.03, 2 * 0.035/0.03) ≈ (2.3333, 2.3333) -->
+    <!-- 俯视相机：在场景中心上方 2m，朝正下方 -->
+    <camera name="world_camera"
+            pos="2.3333333 2.3333333 2.0"
+            euler="0 -90 0"/>
+
+    <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
+
+    <!-- 上边界：薄的深灰色墙 -->
+    <geom name="boundary_top" type="box"
+          pos="2.3333333 4.6666667 0.25"
+          size="2.3333333 0.005 0.25"
+          rgba="0.5 0.5 0.5 0.4"/>
+
+    <!-- 下边界：薄的深灰色墙 -->
+    <geom name="boundary_bottom" type="box"
+          pos="2.3333333 0 0.25"
+          size="2.3333333 0.005 0.25"
+          rgba="0.5 0.5 0.5 0.4"/>
+
+    <!-- 右边界：薄的深灰色墙 -->
+    <geom name="boundary_right" type="box"
+          pos="4.6666667 2.3333333 0.25"
+          size="0.005 2.3333333 0.25"
+          rgba="0.5 0.5 0.5 0.4"/>
+
+    <!-- 左边界：薄的深灰色墙 -->
+    <geom name="boundary_left" type="box"
+          pos="0 2.3333333 0.25"
+          size="0.005 2.3333333 0.25"
+          rgba="0.5 0.5 0.5 0.4"/>
+
+    <!--
+      说明：
+      - cf2.xml 里本身有一个 body name="cf2" 的 Crazyflie 机体；
+        我们现在不再把它当 hunter0，而是自己定义 hunter0~hunter3。
+      - hunter0~hunter3、target_cf 都使用 childclass="cf2" 复用 Crazyflie 的几何和材质。
+      - 每个 hunter / target 再挂一个球形安全区域。
+      - 障碍物 obs0~obs9 的位置和半径由 Python 程序动态更新。
+    -->
+
+    <!-- Hunter 0（第一架追逐者） -->
+    <body name="hunter0" pos="0.3 0.0 0.1" childclass="cf2">
+      <joint name="hunter0_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.033"
+                diaginertia="1.395e-5 1.395e-5 2.173e-5"/>
+
+      <!-- 复用 cf2 的可视几何 -->
+      <geom mesh="cf2_0" material="propeller_plastic"   class="visual"/>
+      <geom mesh="cf2_1" material="medium_gloss_plastic" class="visual"/>
+      <geom mesh="cf2_2" material="polished_gold"        class="visual"/>
+      <geom mesh="cf2_3" material="polished_plastic"     class="visual"/>
+      <geom mesh="cf2_4" material="burnished_chrome"     class="visual"/>
+      <geom mesh="cf2_5" material="body_frame_plastic"   class="visual"/>
+      <geom mesh="cf2_6" material="white"                class="visual"/>
+
+      <!-- 碰撞几何 -->
+      <geom mesh="cf2_collision_0" class="collision"/>
+      <geom mesh="cf2_collision_1" class="collision"/>
+      <geom mesh="cf2_collision_2" class="collision"/>
+      <geom mesh="cf2_collision_3" class="collision"/>
+      <geom mesh="cf2_collision_4" class="collision"/>
+      <geom mesh="cf2_collision_5" class="collision"/>
+      <geom mesh="cf2_collision_6" class="collision"/>
+      <geom mesh="cf2_collision_7" class="collision"/>
+      <geom mesh="cf2_collision_8" class="collision"/>
+      <geom mesh="cf2_collision_9" class="collision"/>
+      <geom mesh="cf2_collision_10" class="collision"/>
+      <geom mesh="cf2_collision_11" class="collision"/>
+      <geom mesh="cf2_collision_12" class="collision"/>
+      <geom mesh="cf2_collision_13" class="collision"/>
+      <geom mesh="cf2_collision_14" class="collision"/>
+      <geom mesh="cf2_collision_15" class="collision"/>
+      <geom mesh="cf2_collision_16" class="collision"/>
+      <geom mesh="cf2_collision_17" class="collision"/>
+      <geom mesh="cf2_collision_18" class="collision"/>
+      <geom mesh="cf2_collision_19" class="collision"/>
+      <geom mesh="cf2_collision_20" class="collision"/>
+      <geom mesh="cf2_collision_21" class="collision"/>
+      <geom mesh="cf2_collision_22" class="collision"/>
+      <geom mesh="cf2_collision_23" class="collision"/>
+      <geom mesh="cf2_collision_24" class="collision"/>
+      <geom mesh="cf2_collision_25" class="collision"/>
+      <geom mesh="cf2_collision_26" class="collision"/>
+      <geom mesh="cf2_collision_27" class="collision"/>
+      <geom mesh="cf2_collision_28" class="collision"/>
+      <geom mesh="cf2_collision_29" class="collision"/>
+      <geom mesh="cf2_collision_30" class="collision"/>
+      <geom mesh="cf2_collision_31" class="collision"/>
+
+      <!-- Hunter0 安全区域（绿色半透明球体，半径约 0.035） -->
+      <geom name="hunter0_safe" type="sphere"
+            pos="0 0 0" size="0.06"
+            material="safe_hunter"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- Hunter 1（第二架追逐者） -->
+    <body name="hunter1" pos="0.2 0.0 0.1" childclass="cf2">
+      <joint name="hunter1_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.033"
+                diaginertia="1.395e-5 1.395e-5 2.173e-5"/>
+
+      <!-- 复用 cf2 的可视几何 -->
+      <geom mesh="cf2_0" material="propeller_plastic"   class="visual"/>
+      <geom mesh="cf2_1" material="medium_gloss_plastic" class="visual"/>
+      <geom mesh="cf2_2" material="polished_gold"        class="visual"/>
+      <geom mesh="cf2_3" material="polished_plastic"     class="visual"/>
+      <geom mesh="cf2_4" material="burnished_chrome"     class="visual"/>
+      <geom mesh="cf2_5" material="body_frame_plastic"   class="visual"/>
+      <geom mesh="cf2_6" material="white"                class="visual"/>
+
+      <!-- 碰撞几何 -->
+      <geom mesh="cf2_collision_0" class="collision"/>
+      <geom mesh="cf2_collision_1" class="collision"/>
+      <geom mesh="cf2_collision_2" class="collision"/>
+      <geom mesh="cf2_collision_3" class="collision"/>
+      <geom mesh="cf2_collision_4" class="collision"/>
+      <geom mesh="cf2_collision_5" class="collision"/>
+      <geom mesh="cf2_collision_6" class="collision"/>
+      <geom mesh="cf2_collision_7" class="collision"/>
+      <geom mesh="cf2_collision_8" class="collision"/>
+      <geom mesh="cf2_collision_9" class="collision"/>
+      <geom mesh="cf2_collision_10" class="collision"/>
+      <geom mesh="cf2_collision_11" class="collision"/>
+      <geom mesh="cf2_collision_12" class="collision"/>
+      <geom mesh="cf2_collision_13" class="collision"/>
+      <geom mesh="cf2_collision_14" class="collision"/>
+      <geom mesh="cf2_collision_15" class="collision"/>
+      <geom mesh="cf2_collision_16" class="collision"/>
+      <geom mesh="cf2_collision_17" class="collision"/>
+      <geom mesh="cf2_collision_18" class="collision"/>
+      <geom mesh="cf2_collision_19" class="collision"/>
+      <geom mesh="cf2_collision_20" class="collision"/>
+      <geom mesh="cf2_collision_21" class="collision"/>
+      <geom mesh="cf2_collision_22" class="collision"/>
+      <geom mesh="cf2_collision_23" class="collision"/>
+      <geom mesh="cf2_collision_24" class="collision"/>
+      <geom mesh="cf2_collision_25" class="collision"/>
+      <geom mesh="cf2_collision_26" class="collision"/>
+      <geom mesh="cf2_collision_27" class="collision"/>
+      <geom mesh="cf2_collision_28" class="collision"/>
+      <geom mesh="cf2_collision_29" class="collision"/>
+      <geom mesh="cf2_collision_30" class="collision"/>
+      <geom mesh="cf2_collision_31" class="collision"/>
+
+      <!-- Hunter1 安全区域 -->
+      <geom name="hunter1_safe" type="sphere"
+            pos="0 0 0" size="0.06"
+            material="safe_hunter"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- Hunter 2（第三架追逐者） -->
+    <body name="hunter2" pos="-0.2 0.0 0.1" childclass="cf2">
+      <joint name="hunter2_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.033"
+                diaginertia="1.395e-5 1.395e-5 2.173e-5"/>
+
+      <geom mesh="cf2_0" material="propeller_plastic"   class="visual"/>
+      <geom mesh="cf2_1" material="medium_gloss_plastic" class="visual"/>
+      <geom mesh="cf2_2" material="polished_gold"        class="visual"/>
+      <geom mesh="cf2_3" material="polished_plastic"     class="visual"/>
+      <geom mesh="cf2_4" material="burnished_chrome"     class="visual"/>
+      <geom mesh="cf2_5" material="body_frame_plastic"   class="visual"/>
+      <geom mesh="cf2_6" material="white"                class="visual"/>
+
+      <geom mesh="cf2_collision_0" class="collision"/>
+      <geom mesh="cf2_collision_1" class="collision"/>
+      <geom mesh="cf2_collision_2" class="collision"/>
+      <geom mesh="cf2_collision_3" class="collision"/>
+      <geom mesh="cf2_collision_4" class="collision"/>
+      <geom mesh="cf2_collision_5" class="collision"/>
+      <geom mesh="cf2_collision_6" class="collision"/>
+      <geom mesh="cf2_collision_7" class="collision"/>
+      <geom mesh="cf2_collision_8" class="collision"/>
+      <geom mesh="cf2_collision_9" class="collision"/>
+      <geom mesh="cf2_collision_10" class="collision"/>
+      <geom mesh="cf2_collision_11" class="collision"/>
+      <geom mesh="cf2_collision_12" class="collision"/>
+      <geom mesh="cf2_collision_13" class="collision"/>
+      <geom mesh="cf2_collision_14" class="collision"/>
+      <geom mesh="cf2_collision_15" class="collision"/>
+      <geom mesh="cf2_collision_16" class="collision"/>
+      <geom mesh="cf2_collision_17" class="collision"/>
+      <geom mesh="cf2_collision_18" class="collision"/>
+      <geom mesh="cf2_collision_19" class="collision"/>
+      <geom mesh="cf2_collision_20" class="collision"/>
+      <geom mesh="cf2_collision_21" class="collision"/>
+      <geom mesh="cf2_collision_22" class="collision"/>
+      <geom mesh="cf2_collision_23" class="collision"/>
+      <geom mesh="cf2_collision_24" class="collision"/>
+      <geom mesh="cf2_collision_25" class="collision"/>
+      <geom mesh="cf2_collision_26" class="collision"/>
+      <geom mesh="cf2_collision_27" class="collision"/>
+      <geom mesh="cf2_collision_28" class="collision"/>
+      <geom mesh="cf2_collision_29" class="collision"/>
+      <geom mesh="cf2_collision_30" class="collision"/>
+      <geom mesh="cf2_collision_31" class="collision"/>
+
+      <!-- Hunter2 安全区域 -->
+      <geom name="hunter2_safe" type="sphere"
+            pos="0 0 0" size="0.06"
+            material="safe_hunter"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- Hunter 3（第四架追逐者） -->
+    <body name="hunter3" pos="0.0 -0.25 0.1" childclass="cf2">
+      <joint name="hunter3_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.033"
+                diaginertia="1.395e-5 1.395e-5 2.173e-5"/>
+
+      <geom mesh="cf2_0" material="propeller_plastic"   class="visual"/>
+      <geom mesh="cf2_1" material="medium_gloss_plastic" class="visual"/>
+      <geom mesh="cf2_2" material="polished_gold"        class="visual"/>
+      <geom mesh="cf2_3" material="polished_plastic"     class="visual"/>
+      <geom mesh="cf2_4" material="burnished_chrome"     class="visual"/>
+      <geom mesh="cf2_5" material="body_frame_plastic"   class="visual"/>
+      <geom mesh="cf2_6" material="white"                class="visual"/>
+
+      <geom mesh="cf2_collision_0" class="collision"/>
+      <geom mesh="cf2_collision_1" class="collision"/>
+      <geom mesh="cf2_collision_2" class="collision"/>
+      <geom mesh="cf2_collision_3" class="collision"/>
+      <geom mesh="cf2_collision_4" class="collision"/>
+      <geom mesh="cf2_collision_5" class="collision"/>
+      <geom mesh="cf2_collision_6" class="collision"/>
+      <geom mesh="cf2_collision_7" class="collision"/>
+      <geom mesh="cf2_collision_8" class="collision"/>
+      <geom mesh="cf2_collision_9" class="collision"/>
+      <geom mesh="cf2_collision_10" class="collision"/>
+      <geom mesh="cf2_collision_11" class="collision"/>
+      <geom mesh="cf2_collision_12" class="collision"/>
+      <geom mesh="cf2_collision_13" class="collision"/>
+      <geom mesh="cf2_collision_14" class="collision"/>
+      <geom mesh="cf2_collision_15" class="collision"/>
+      <geom mesh="cf2_collision_16" class="collision"/>
+      <geom mesh="cf2_collision_17" class="collision"/>
+      <geom mesh="cf2_collision_18" class="collision"/>
+      <geom mesh="cf2_collision_19" class="collision"/>
+      <geom mesh="cf2_collision_20" class="collision"/>
+      <geom mesh="cf2_collision_21" class="collision"/>
+      <geom mesh="cf2_collision_22" class="collision"/>
+      <geom mesh="cf2_collision_23" class="collision"/>
+      <geom mesh="cf2_collision_24" class="collision"/>
+      <geom mesh="cf2_collision_25" class="collision"/>
+      <geom mesh="cf2_collision_26" class="collision"/>
+      <geom mesh="cf2_collision_27" class="collision"/>
+      <geom mesh="cf2_collision_28" class="collision"/>
+      <geom mesh="cf2_collision_29" class="collision"/>
+      <geom mesh="cf2_collision_30" class="collision"/>
+      <geom mesh="cf2_collision_31" class="collision"/>
+
+      <!-- Hunter3 安全区域 -->
+      <geom name="hunter3_safe" type="sphere"
+            pos="0 0 0" size="0.06"
+            material="safe_hunter"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- 目标机（红色机体 + 红色安全球） -->
+    <body name="target_cf" pos="0.0 0.3 0.1" childclass="cf2">
+      <joint name="target_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.033"
+                diaginertia="1.395e-5 1.395e-5 2.173e-5"/>
+
+      <!-- 机体全部用 target_red -->
+      <geom mesh="cf2_0" material="propeller_plastic"   class="visual"/>
+      <geom mesh="cf2_1" material="medium_gloss_plastic" class="visual"/>
+      <geom mesh="cf2_2" material="polished_gold"        class="visual"/>
+      <geom mesh="cf2_3" material="polished_plastic"     class="visual"/>
+      <geom mesh="cf2_4" material="burnished_chrome"     class="visual"/>
+      <geom mesh="cf2_5" material="body_frame_plastic"   class="visual"/>
+      <geom mesh="cf2_6" material="white"                class="visual"/>
+
+      <geom mesh="cf2_collision_0" class="collision"/>
+      <geom mesh="cf2_collision_1" class="collision"/>
+      <geom mesh="cf2_collision_2" class="collision"/>
+      <geom mesh="cf2_collision_3" class="collision"/>
+      <geom mesh="cf2_collision_4" class="collision"/>
+      <geom mesh="cf2_collision_5" class="collision"/>
+      <geom mesh="cf2_collision_6" class="collision"/>
+      <geom mesh="cf2_collision_7" class="collision"/>
+      <geom mesh="cf2_collision_8" class="collision"/>
+      <geom mesh="cf2_collision_9" class="collision"/>
+      <geom mesh="cf2_collision_10" class="collision"/>
+      <geom mesh="cf2_collision_11" class="collision"/>
+      <geom mesh="cf2_collision_12" class="collision"/>
+      <geom mesh="cf2_collision_13" class="collision"/>
+      <geom mesh="cf2_collision_14" class="collision"/>
+      <geom mesh="cf2_collision_15" class="collision"/>
+      <geom mesh="cf2_collision_16" class="collision"/>
+      <geom mesh="cf2_collision_17" class="collision"/>
+      <geom mesh="cf2_collision_18" class="collision"/>
+      <geom mesh="cf2_collision_19" class="collision"/>
+      <geom mesh="cf2_collision_20" class="collision"/>
+      <geom mesh="cf2_collision_21" class="collision"/>
+      <geom mesh="cf2_collision_22" class="collision"/>
+      <geom mesh="cf2_collision_23" class="collision"/>
+      <geom mesh="cf2_collision_24" class="collision"/>
+      <geom mesh="cf2_collision_25" class="collision"/>
+      <geom mesh="cf2_collision_26" class="collision"/>
+      <geom mesh="cf2_collision_27" class="collision"/>
+      <geom mesh="cf2_collision_28" class="collision"/>
+      <geom mesh="cf2_collision_29" class="collision"/>
+      <geom mesh="cf2_collision_30" class="collision"/>
+      <geom mesh="cf2_collision_31" class="collision"/>
+
+      <!-- 目标机安全区域（红色半透明球体） -->
+      <geom name="target_safe" type="sphere"
+            pos="0 0 0" size="0.06"
+            material="safe_target"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- ========= 障碍物 obs0 ~ obs9（灰色半透明球体） ========= -->
+
+    <body name="obs0" pos="0 0 -10">
+      <joint name="obs0_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.01"
+                diaginertia="1e-5 1e-5 1e-5"/>
+      <geom name="obs0_geom" type="sphere"
+            size="0.01"
+            material="obstacle_mat"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <body name="obs1" pos="0 0 -10">
+      <joint name="obs1_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.01"
+                diaginertia="1e-5 1e-5 1e-5"/>
+      <geom name="obs1_geom" type="sphere"
+            size="0.01"
+            material="obstacle_mat"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <body name="obs2" pos="0 0 -10">
+      <joint name="obs2_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.01"
+                diaginertia="1e-5 1e-5 1e-5"/>
+      <geom name="obs2_geom" type="sphere"
+            size="0.01"
+            material="obstacle_mat"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <body name="obs3" pos="0 0 -10">
+      <joint name="obs3_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.01"
+                diaginertia="1e-5 1e-5 1e-5"/>
+      <geom name="obs3_geom" type="sphere"
+            size="0.01"
+            material="obstacle_mat"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <body name="obs4" pos="0 0 -10">
+      <joint name="obs4_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.01"
+                diaginertia="1e-5 1e-5 1e-5"/>
+      <geom name="obs4_geom" type="sphere"
+            size="0.01"
+            material="obstacle_mat"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <body name="obs5" pos="0 0 -10">
+      <joint name="obs5_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.01"
+                diaginertia="1e-5 1e-5 1e-5"/>
+      <geom name="obs5_geom" type="sphere"
+            size="0.01"
+            material="obstacle_mat"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <body name="obs6" pos="0 0 -10">
+      <joint name="obs6_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.01"
+                diaginertia="1e-5 1e-5 1e-5"/>
+      <geom name="obs6_geom" type="sphere"
+            size="0.01"
+            material="obstacle_mat"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <body name="obs7" pos="0 0 -10">
+      <joint name="obs7_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.01"
+                diaginertia="1e-5 1e-5 1e-5"/>
+      <geom name="obs7_geom" type="sphere"
+            size="0.01"
+            material="obstacle_mat"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <body name="obs8" pos="0 0 -10">
+      <joint name="obs8_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.01"
+                diaginertia="1e-5 1e-5 1e-5"/>
+      <geom name="obs8_geom" type="sphere"
+            size="0.01"
+            material="obstacle_mat"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <body name="obs9" pos="0 0 -10">
+      <joint name="obs9_root" type="free"/>
+      <inertial pos="0 0 0" mass="0.01"
+                diaginertia="1e-5 1e-5 1e-5"/>
+      <geom name="obs9_geom" type="sphere"
+            size="0.01"
+            material="obstacle_mat"
+            contype="0" conaffinity="0"/>
+    </body>
+
+  </worldbody>
+</mujoco>
