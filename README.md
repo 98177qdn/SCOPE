@@ -19,6 +19,18 @@ Lower versions are not guaranteed to be feasible:
     torchaudio: >=2.4.0+cu124
     torchvision: >=0.19.0+cu124
 
+# Quick Start
+
+------------
+Train:
+    python trainer/scope/scope_train.py
+
+Test (surrogate env):
+    python trainer/scope/scope_test.py
+
+Test (MuJoCo simulation):
+    python trainer/scope/sim.py
+
 # Project Structure
 
 ------------
@@ -45,16 +57,16 @@ Lower versions are not guaranteed to be feasible:
 	│		├── UAV_Round_up
 	│		└── SPDM.pt				// Model of SPDM
 	├── train_logs
-	├── trainer
+	└── trainer
 		└── scope
 			├── dynamics_models
 			│	├── Dlinear.py
-			│	\vdot
+			│	⋮
 			│	└── TimesNet.py
 			├── dynamics_models.py
 			├── scope_test.py		// Test
 			├── scope_train.py		// Train
-			├── sim.py				// Test on MuJoCo
+			└── sim.py				// Test on MuJoCo
 
 # Sim Result
 
