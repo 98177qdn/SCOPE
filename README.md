@@ -22,35 +22,39 @@ Lower versions are not guaranteed to be feasible:
 # Project Structure
 
 ------------
-
-	├── frames				// Each frame in the evaluation
-    ├── model                               // RL models
-	│   ├── maddpg.py  			// MADDPG
-	│   └── matd3.py   		        // MATD3
-    ├── predict_model                       // Predict model
-	│   └── Dlinear
-	├── tmp				        // Model path
-	│   ├── last		  		// Model of the last training
-	│   ├── maddpg				// Model of maddpg
-	│   │	└── UAV_Round_up                // Name of environment
-	│   ├── matd3 				// Model of matd3
-	│   │	└── UAV_Round_up
-	│   └── ...
-	├── result 				// Result gif
-	│   ├── roundup_fail.gif  	        // Fail result
-	│   └── roundup_success.gif             // Success result
-	├── agent.py   				// Composition of Agent
-	├── buffer.py      			// Buffer for experience replay
-	├── CBF.py 				// CBF function
-	├── evaluate.py				// Evaluate the model
-	├── math_tool.py   		        // Math-relevent functions
-	├── networks.py				// Actor and Critic networks
-	├── predictor.py   			// Pridict module
-	├── sim_env.py 				// Environment
-	├── train.py   				// Training model
-	├── target.png     			// Target icon
-	├── UAV.png    				// Agent icon
-	└── ReadMe.md  				// Helps document
+	├── agents
+	│	└── scope_agents.py   		// SCOPE agents
+	├── crazyfile					// MuJoCo simulator
+	├── envs
+	│	├── icons
+	│	├── CBF.py   				// CBF constraints
+	│	├── math_tools.py
+	│	└── UAVEnv.py   			// environment
+	├── layers
+	├── memory
+	│	└── memory.py   			// experience buffer
+    ├── model
+	│	└── scope.py   		    	// SCOPE
+	├── result
+	│	└── scope
+	│		├── frames
+	│		├── roundup_success.gif
+	│		├── roundup_fail.gif
+	├── tmp				        	// Model path
+	│	└── scope
+	│		├── UAV_Round_up
+	│		└── SPDM.pt				// Model of SPDM
+	├── train_logs
+	├── trainer
+		└── scope
+			├── dynamics_models
+			│	├── Dlinear.py
+			│	\vdot
+			│	└── TimesNet.py
+			├── dynamics_models.py
+			├── scope_test.py		// Test
+			├── scope_train.py		// Train
+			├── sim.py				// Test on MuJoCo
 
 # Sim Result
 
@@ -63,5 +67,6 @@ Lower versions are not guaranteed to be feasible:
 ## Explanation of Document
 
 ------------
+- Surrogate dynamics model: ported from THUML's [Time-Series-Library](https://github.com/thuml/Time-Series-Library);
 - Physics simulator: MuJoCo -> [google-deepmind/mujoco](https://github.com/google-deepmind/mujoco);
 - UAV MuJoCo quadrotor model (`crazyfile`): adapted from LGQWakkk's [Quadrotor-NMPC-Control](https://github.com/LGQWakkk/Quadrotor-NMPC-Control/tree/main/crazyfile) repository.
