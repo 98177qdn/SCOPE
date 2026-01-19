@@ -7,6 +7,15 @@ First, please make sure you have installed Conda. Then, our environment can be i
     conda activate SCOPE
     pip install -r requirements.txt
 
+# Quick Start
+
+------------
+Train: 	```python trainer/scope/scope_train.py```
+
+Test (surrogate env): ```python trainer/scope/scope_test.py```
+
+Test (MuJoCo simulation): ```python trainer/scope/sim.py```
+
 # Key Dependencies
 
 ------------
@@ -18,18 +27,6 @@ Lower versions are not guaranteed to be feasible:
     torch: >=2.4.0+cu124
     torchaudio: >=2.4.0+cu124
     torchvision: >=0.19.0+cu124
-
-# Quick Start
-
-------------
-Train:
-    python trainer/scope/scope_train.py
-
-Test (surrogate env):
-    python trainer/scope/scope_test.py
-
-Test (MuJoCo simulation):
-    python trainer/scope/sim.py
 
 # Project Structure
 
