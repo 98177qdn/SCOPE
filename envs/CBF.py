@@ -9,7 +9,7 @@ def solve_joint_cbf(
         boundary_low, boundary_high,
         u_max,
         lambda1=3.0, lambda2=2.0, buffer=0.03,
-        delta=0.0   # <-- 新增：tightening margin
+        delta=0.0
 ):
     positions = np.asarray(positions, dtype=np.float64)
     velocities = np.asarray(velocities, dtype=np.float64)

@@ -94,7 +94,7 @@ class SCOPE:
 
             _, safe_actions = solve_joint_cbf( positions, velocities, safe_actions, r_hunter=self.env.d_safe, r_target=self.env.d_safe_e,
                 obs_positions=obs_positions, obs_velocities=obs_velocities, obs_radii=obs_radii, target_positions=target_positions, target_velocities=target_velocities,
-                boundary_low=boundary_low, boundary_high=boundary_high, u_max=self.env.a_max, buffer=self.env.v_max**2 / (4 * self.env.a_max), delta=0
+                boundary_low=boundary_low, boundary_high=boundary_high, u_max=self.env.a_max, buffer=0.03, delta=0.06
             )
 
         modified = violations.astype(np.float32)
@@ -154,8 +154,8 @@ class SCOPE:
 
             try:
                 g_val = -safe_value[:, agent_idx]
-                phi = F.softplus((-g_val) / self.tau) * self.tau  # 平滑惩罚
-                phi = T.clamp(phi, max=1.0)  # 限幅防极端梯度
+                phi = F.softplus((-g_val) / self.tau) * self.tau
+                phi = T.clamp(phi, max=1.0)
                 mean_violation = phi.mean()
             except Exception:
                 mean_violation = T.tensor(0.0, device=device)
@@ -178,10 +178,10 @@ class SCOPE:
                     mean_violation.item())
                 self.violation_ema[agent_idx] = v_hat
 
-                if (self.learn_step % self.lambda_update_every) == 0:  # 稀疏更新
+                if (self.learn_step % self.lambda_update_every) == 0:
                     new_lambda = lambda_val + self.eta_lambda * (v_hat - self.epsilon)
-                    new_lambda = max(0.0, min(self.lambda_max, new_lambda))  # 投影+上限
-                    new_lambda *= self.lambda_decay  # 轻微衰减
+                    new_lambda = max(0.0, min(self.lambda_max, new_lambda))
+                    new_lambda *= self.lambda_decay
 
                     if agent_idx < len(self.lambdas):
                         if isinstance(self.lambdas[agent_idx], T.Tensor):
