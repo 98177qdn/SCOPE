@@ -22,19 +22,22 @@ class SCOPE:
         self.lambda_update_every = 10
         self.v_ema_alpha = 0.1
 
-        self.learn_step = 0
-        self.lambdas = [0.0 for _ in range(len(self.agents))]
-        self.violation_ema = [0.0 for _ in range(len(self.agents))]
-
-        self.lambdas = [0.0 for _ in range(self.n_agents)]
         self.eta_lambda = 5e-4
         self.epsilon = 0
         self.tau = 0.2
+
+        # Fixed positive weight for the online auxiliary loss (initial setting).
+        self.safety_coef = 1.0
+        self._online_cbf_cache = None
 
         for agent_idx in range(self.n_agents):
             self.agents.append(SCOPE_Agent(actor_dims[agent_idx], critic_dims,
                                            n_actions, n_agents, agent_idx, alpha=alpha, beta=beta, fc1=fc1, fc2=fc2, gamma=gamma,
                                            chkpt_dir=chkpt_dir))
+
+        self.learn_step = 0
+        self.lambdas = [0.0 for _ in range(len(self.agents))]
+        self.violation_ema = [0.0 for _ in range(len(self.agents))]
 
     def save_checkpoint(self, path=None):
         if not path:
@@ -63,6 +66,11 @@ class SCOPE:
         for agent_idx, agent in enumerate(self.agents):
             action = agent.scope_choose_action(raw_obs[agent_idx], time_step, self.env, test)
             raw_actions.append(action.detach().cpu().numpy())
+
+        if not test:
+            self._cache_online_cbf(raw_obs, raw_actions)
+        else:
+            self._online_cbf_cache = None
 
         positions = [agent.pos for agent in self.env.hunters]
         velocities = [agent.vel for agent in self.env.hunters]
@@ -101,9 +109,89 @@ class SCOPE:
 
         return safe_actions, modified
 
+    def _cache_online_cbf(self, raw_obs, raw_actions):
+        """Freeze the latest pre-step CBF coefficients; keep replay unchanged."""
+        # Match the existing compute_cbf_violation_per_agent formulas.
+        lambda1, lambda2, buffer = 3.0, 2.0, 0.03
+        upper = np.array(
+            [self.env.length, self.env.width, self.env.height][:self.n_actions],
+            dtype=np.float64,
+        )
+        cached_agents = []
+        for i, hunter in enumerate(self.env.hunters):
+            pi = np.asarray(hunter.pos, dtype=np.float64)
+            vi = np.asarray(hunter.vel, dtype=np.float64)
+            rows, offsets = [], []
+
+            def add_distance_constraint(entity, radius, other_action=None):
+                d = pi - np.asarray(entity.pos, dtype=np.float64)
+                v = vi - np.asarray(entity.vel, dtype=np.float64)
+                dist2 = float(np.dot(d, d))
+                if dist2 < 1e-12:
+                    return
+                h = dist2 - radius ** 2
+                dh = 2.0 * np.dot(d, v)
+                offset = -2.0 * np.dot(v, v) + 2.0 * lambda1 * dh + lambda2 * h
+                if other_action is not None:
+                    offset -= 2.0 * np.dot(d, other_action)
+                rows.append(2.0 * d)
+                offsets.append(float(offset))
+
+            for j, other in enumerate(self.env.hunters):
+                if j != i:
+                    add_distance_constraint(
+                        other, 2.0 * self.env.d_safe + buffer, raw_actions[j]
+                    )
+            for target in self.env.targets:
+                add_distance_constraint(
+                    target, self.env.d_safe + self.env.d_safe_e + buffer
+                )
+            for obstacle in self.env.obstacles:
+                add_distance_constraint(
+                    obstacle, self.env.d_safe + obstacle.radius + buffer
+                )
+
+            for d in range(self.n_actions):
+                direction = np.eye(self.n_actions)[d]
+                rows.extend([-direction, direction])
+                offsets.extend([
+                    -2.0 * lambda1 * vi[d] + lambda2 * (upper[d] - pi[d] - buffer),
+                    2.0 * lambda1 * vi[d] + lambda2 * (pi[d] - buffer),
+                ])
+            cached_agents.append({
+                "obs": np.array(raw_obs[i], dtype=np.float32, copy=True),
+                "A": np.asarray(rows, dtype=np.float32),
+                "b": np.asarray(offsets, dtype=np.float32),
+            })
+        self._online_cbf_cache = {
+            "agents": cached_agents,
+            "a_max": float(self.env.a_max),
+        }
+
+    def _online_cbf_loss(self, agent_idx):
+        """Differentiate a pre-filter safety penalty through the current actor."""
+        if self._online_cbf_cache is None:
+            raise RuntimeError("Training actions must be chosen before learn().")
+        agent = self.agents[agent_idx]
+        cached = self._online_cbf_cache["agents"][agent_idx]
+        device = agent.actor.device
+        obs = T.as_tensor(cached["obs"], dtype=T.float32, device=device).unsqueeze(0)
+        action = agent.actor(obs).squeeze(0)
+        norm = T.linalg.vector_norm(action).clamp_min(1e-8)
+        scale = (self._online_cbf_cache["a_max"] / norm).clamp(max=1.0)
+        action = action * scale
+        A = T.as_tensor(cached["A"], dtype=action.dtype, device=device)
+        b = T.as_tensor(cached["b"], dtype=action.dtype, device=device)
+        ell = (A @ action + b).amin()
+        return F.softplus(-ell)
+
+
     def learn(self, memory):
         if not memory.ready():
             return
+
+        if self._online_cbf_cache is None:
+            raise RuntimeError("Training actions must be chosen before learn().")
 
         actor_states, states, actions, rewards, \
             actor_new_states, states_, dones, safe_value = memory.sample_buffer()
@@ -150,46 +238,18 @@ class SCOPE:
             oa[:, agent_idx * self.n_actions:agent_idx * self.n_actions + self.n_actions] = agent.actor.forward(
                 mu_states)
 
-            actor_loss_rl = -T.mean(agent.critic.forward(states, oa, agent_idx).flatten())
+            actor_loss_rl = -T.mean(
+                agent.critic.forward(states, oa, agent_idx).flatten()
+            )
 
-            try:
-                g_val = -safe_value[:, agent_idx]
-                phi = F.softplus((-g_val) / self.tau) * self.tau
-                phi = T.clamp(phi, max=1.0)
-                mean_violation = phi.mean()
-            except Exception:
-                mean_violation = T.tensor(0.0, device=device)
-
-            lambda_i = self.lambdas[agent_idx] if agent_idx < len(self.lambdas) else 0.0
-            if isinstance(lambda_i, T.Tensor):
-                lambda_val = lambda_i.item()
-            else:
-                lambda_val = float(lambda_i)
-
-            actor_loss = actor_loss_rl + lambda_val * (mean_violation - self.epsilon)
+            # Online safety uses its own matching observation and CBF snapshot.
+            safety_loss = self._online_cbf_loss(agent_idx)
+            actor_loss = actor_loss_rl + self.safety_coef * safety_loss
 
             agent.actor.optimizer.zero_grad()
             actor_loss.backward(retain_graph=True)
             agent.actor.optimizer.step()
             agent.actor.scheduler.step()
-
-            with T.no_grad():
-                v_hat = (1.0 - self.v_ema_alpha) * self.violation_ema[agent_idx] + self.v_ema_alpha * float(
-                    mean_violation.item())
-                self.violation_ema[agent_idx] = v_hat
-
-                if (self.learn_step % self.lambda_update_every) == 0:
-                    new_lambda = lambda_val + self.eta_lambda * (v_hat - self.epsilon)
-                    new_lambda = max(0.0, min(self.lambda_max, new_lambda))
-                    new_lambda *= self.lambda_decay
-
-                    if agent_idx < len(self.lambdas):
-                        if isinstance(self.lambdas[agent_idx], T.Tensor):
-                            self.lambdas[agent_idx].fill_(new_lambda)
-                        else:
-                            self.lambdas[agent_idx] = new_lambda
-                    else:
-                        self.lambdas.append(new_lambda)
 
         # update target networks as before
         for agent in self.agents:
