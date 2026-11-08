@@ -17,27 +17,27 @@ class SCOPE:
         chkpt_dir += scenario
         self.chkpt_dir = chkpt_dir
 
+
+        # Adapt each agent's safety weight using actual CBF violations.
+        self.lambda_init = 0.1
         self.lambda_max = 1.0
         self.lambda_decay = 0.999
         self.lambda_update_every = 10
         self.v_ema_alpha = 0.1
-
         self.eta_lambda = 5e-4
-        self.epsilon = 0
+        self.epsilon = 0.0
         self.tau = 0.2
 
-        # Fixed positive weight for the online auxiliary loss (initial setting).
-        self.safety_coef = 1.0
+        self.learn_step = 0
+        self.lambdas = [self.lambda_init for _ in range(self.n_agents)]
+        self.violation_ema = [0.0 for _ in range(self.n_agents)]
+        self.last_safety_stats = [None for _ in range(self.n_agents)]
         self._online_cbf_cache = None
 
         for agent_idx in range(self.n_agents):
             self.agents.append(SCOPE_Agent(actor_dims[agent_idx], critic_dims,
                                            n_actions, n_agents, agent_idx, alpha=alpha, beta=beta, fc1=fc1, fc2=fc2, gamma=gamma,
                                            chkpt_dir=chkpt_dir))
-
-        self.learn_step = 0
-        self.lambdas = [0.0 for _ in range(len(self.agents))]
-        self.violation_ema = [0.0 for _ in range(len(self.agents))]
 
     def save_checkpoint(self, path=None):
         if not path:
@@ -169,7 +169,7 @@ class SCOPE:
         }
 
     def _online_cbf_loss(self, agent_idx):
-        """Differentiate a pre-filter safety penalty through the current actor."""
+        """Return a differentiable penalty and a detached violation magnitude."""
         if self._online_cbf_cache is None:
             raise RuntimeError("Training actions must be chosen before learn().")
         agent = self.agents[agent_idx]
@@ -183,7 +183,9 @@ class SCOPE:
         A = T.as_tensor(cached["A"], dtype=action.dtype, device=device)
         b = T.as_tensor(cached["b"], dtype=action.dtype, device=device)
         ell = (A @ action + b).amin()
-        return F.softplus(-ell)
+        safety_loss = F.softplus(-ell)
+        violation = F.relu(-ell.detach())
+        return safety_loss, violation
 
 
     def learn(self, memory):
@@ -219,6 +221,9 @@ class SCOPE:
         new_actions = T.cat([acts for acts in all_agents_new_actions], dim=1)
         old_actions = T.cat([acts for acts in old_agents_actions], dim=1)
 
+        # Count successful replay sampling once, not once per agent.
+        self.learn_step += 1
+
         # === per-agent updates ===
         for agent_idx, agent in enumerate(self.agents):
 
@@ -243,13 +248,39 @@ class SCOPE:
             )
 
             # Online safety uses its own matching observation and CBF snapshot.
-            safety_loss = self._online_cbf_loss(agent_idx)
-            actor_loss = actor_loss_rl + self.safety_coef * safety_loss
+            safety_loss, violation = self._online_cbf_loss(agent_idx)
+            lambda_val = float(self.lambdas[agent_idx])
+            actor_loss = actor_loss_rl + lambda_val * safety_loss
 
             agent.actor.optimizer.zero_grad()
             actor_loss.backward(retain_graph=True)
             agent.actor.optimizer.step()
             agent.actor.scheduler.step()
+
+            with T.no_grad():
+                violation_value = float(violation.item())
+                v_hat = (
+                    (1.0 - self.v_ema_alpha) * self.violation_ema[agent_idx]
+                    + self.v_ema_alpha * violation_value
+                )
+                self.violation_ema[agent_idx] = v_hat
+
+                if self.learn_step % self.lambda_update_every == 0:
+                    new_lambda = (
+                        lambda_val + self.eta_lambda * (v_hat - self.epsilon)
+                    )
+                    new_lambda = max(0.0, min(self.lambda_max, new_lambda))
+                    self.lambdas[agent_idx] = new_lambda * self.lambda_decay
+
+                safety_value = float(safety_loss.detach().item())
+                self.last_safety_stats[agent_idx] = {
+                    "lambda_used": lambda_val,
+                    "lambda_next": float(self.lambdas[agent_idx]),
+                    "violation": violation_value,
+                    "violation_ema": v_hat,
+                    "safety_loss": safety_value,
+                    "weighted_safety_loss": lambda_val * safety_value,
+                }
 
         # update target networks as before
         for agent in self.agents:
